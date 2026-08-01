@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { BannerAd } from './ads/BannerAd';
 import { AD_GROUP_ID } from './ads/config';
+import { bumpInterstitial } from './ads/interstitial';
 import {
   compoundSavingsInterest,
   dDay,
@@ -160,7 +161,7 @@ function SavingsTab() {
       <Field label="월 납입액" value={monthly} onChange={setMonthly} suffix="원" />
       <Field label="연이율" value={rate} onChange={setRate} suffix="%" />
       <Field label="기간" value={months} onChange={setMonths} suffix="개월" />
-      <TaxPicker mode={tax} onChange={setTax} />
+      <TaxPicker mode={tax} onChange={(m) => { setTax(m); bumpInterstitial(2); }} />
       <ResultCard
         title="만기 수령액 (단리)"
         big={won(r.total)}
@@ -190,7 +191,7 @@ function GoalTab() {
       <Field label="목표 금액" value={goal} onChange={setGoal} suffix="원" />
       <Field label="기간" value={months} onChange={setMonths} suffix="개월" />
       <Field label="연이율" value={rate} onChange={setRate} suffix="%" />
-      <TaxPicker mode={tax} onChange={setTax} />
+      <TaxPicker mode={tax} onChange={(m) => { setTax(m); bumpInterstitial(2); }} />
       <ResultCard
         title="필요한 월 납입액 (단리 기준)"
         big={need === 0 ? '-' : `월 ${won(need)}`}
@@ -230,7 +231,7 @@ function DepositTab() {
           월복리
         </button>
       </div>
-      <TaxPicker mode={tax} onChange={setTax} />
+      <TaxPicker mode={tax} onChange={(m) => { setTax(m); bumpInterstitial(2); }} />
       <ResultCard
         title={`예금 만기 수령액 (${compound ? '월복리' : '단리'})`}
         big={won(r.total)}
