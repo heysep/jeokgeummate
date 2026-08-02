@@ -169,7 +169,28 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 .strip-name { font-size: 15px; font-weight: 800; color: var(--gold-deep); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strip-meta { font-size: 13px; font-weight: 700; color: var(--sub); flex-shrink: 0; }
 
-.ad-banner { display: flex; flex-direction: column; gap: 4px; }
+/**
+ * 배너는 화면 하단에 붙여 둔다.
+ *
+ * 문서 맨 아래에 그냥 두면 스크롤해야 보인다. 이 앱은 결과가 첫 화면에 다 나오는
+ * 계산기라 스크롤할 이유가 없고, 중앙 세션이 16초다. 실측: DAU 166명인 날
+ * 광고 노출이 1건이었다(165명은 배너를 본 적조차 없음).
+ *
+ * fixed가 아니라 sticky인 이유 — sticky는 문서 흐름에서 자기 자리를 그대로
+ * 차지한다. 그래서 마지막 콘텐츠나 CTA를 덮지 않고, 여백을 따로 계산해 줄
+ * 필요도 없다. 조상에 overflow:hidden이 없어야 동작하는데 .app에는 없다.
+ */
+.ad-banner {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  /* .app의 좌우 패딩을 상쇄해 화면 끝까지 채운다 */
+  margin: 4px -20px 0;
+  padding: 6px 20px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
 .ad-banner-label { font-size: 11px; color: var(--sub); }
 
 .disclaimer { font-size: 12px; color: #a5946e; line-height: 1.6; }

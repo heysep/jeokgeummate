@@ -561,12 +561,13 @@ export function App() {
       {tab === '예금' && <DepositTab />}
       {tab === '내 적금' && <MyTab items={savings} onChange={updateSavings} />}
 
-      <BannerAd adGroupId={AD_GROUP_ID} />
-
       <p className="disclaimer">
         본 계산 결과는 참고용 모의 계산으로 법적 효력이 없어요. 실제 이자·세금은 상품 약관과 가입 조건에 따라 달라질 수
         있어요. 모든 데이터는 기기 안에만 저장돼요.
       </p>
+
+      {/* 배너는 sticky라 마지막에 와야 화면 하단에 붙는다 */}
+      <BannerAd adGroupId={AD_GROUP_ID} />
     </div>
   );
 }
