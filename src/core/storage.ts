@@ -48,3 +48,43 @@ export function saveSavings(list: SavedSaving[]): void {
     // 저장 실패(용량 초과 등)는 조용히 무시 — 다음 렌더에서 메모리 상태 유지
   }
 }
+
+/** 마지막으로 계산한 입력값 — 다음에 열면 그대로 복원한다. */
+export interface LastInput {
+  monthly: string;
+  ratePct: string;
+  months: string;
+  taxMode: string;
+}
+
+const LAST_KEY = `${STORAGE_PREFIX}last.v1`;
+
+function isLast(v: unknown): v is LastInput {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.monthly === 'string' &&
+    typeof o.ratePct === 'string' &&
+    typeof o.months === 'string' &&
+    typeof o.taxMode === 'string'
+  );
+}
+
+export function loadLastInput(): LastInput | null {
+  try {
+    const raw = localStorage.getItem(LAST_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isLast(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastInput(v: LastInput): void {
+  try {
+    localStorage.setItem(LAST_KEY, JSON.stringify(v));
+  } catch {
+    // 무시
+  }
+}

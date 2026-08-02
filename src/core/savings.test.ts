@@ -8,6 +8,10 @@ import {
   maturityDate,
   requiredMonthly,
   savingsSimple,
+  effectiveYieldPct,
+  monthsElapsed,
+  progressRatio,
+  savingsSeries,
   simpleSavingsInterest,
   taxOnInterest,
 } from './savings';
@@ -123,5 +127,36 @@ describe('만기일·D-day', () => {
     expect(dDay('2026-08-01', today)).toBe(0);
     expect(dDay('2026-08-31', today)).toBe(30);
     expect(dDay('2026-07-31', today)).toBe(-1);
+  });
+});
+
+describe('실효수익률·진행률', () => {
+  it('연 3.5%·12개월 단리 적금의 원금 대비 세전 수익률은 약 1.90%', () => {
+    const r = savingsSimple(300000, 3.5, 12, 'pre');
+    expect(effectiveYieldPct(r.principal, r.interest)).toBeCloseTo(1.8958, 3);
+  });
+
+  it('원금 0이면 0을 반환한다', () => {
+    expect(effectiveYieldPct(0, 1000)).toBe(0);
+  });
+
+  it('경과 개월은 가입일 기준이며 0~기간으로 클램프된다', () => {
+    expect(monthsElapsed('2026-01-15', 12, new Date(2026, 6, 14))).toBe(5);
+    expect(monthsElapsed('2026-01-15', 12, new Date(2026, 6, 15))).toBe(6);
+    expect(monthsElapsed('2026-01-15', 12, new Date(2025, 0, 1))).toBe(0);
+    expect(monthsElapsed('2026-01-15', 12, new Date(2030, 0, 1))).toBe(12);
+  });
+
+  it('진행률은 0~1이고 기간 0이면 0', () => {
+    expect(progressRatio('2026-01-15', 12, new Date(2026, 6, 15))).toBeCloseTo(0.5, 5);
+    expect(progressRatio('2026-01-15', 0, new Date(2026, 6, 15))).toBe(0);
+  });
+
+  it('추이 시리즈는 기간만큼 증가하며 마지막 값이 만기 수령액과 같다', () => {
+    const s = savingsSeries(300000, 3.5, 12, 'general');
+    expect(s).toHaveLength(12);
+    expect(s[11]).toBe(savingsSimple(300000, 3.5, 12, 'general').total);
+    expect(s[0]).toBeLessThan(s[11]);
+    expect(savingsSeries(300000, 3.5, 0, 'general')).toEqual([]);
   });
 });

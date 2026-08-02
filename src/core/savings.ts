@@ -105,6 +105,51 @@ export function depositResult(principal: number, annualRatePct: number, months: 
   return buildResult(Math.round(principal), interest, mode);
 }
 
+/**
+ * 단리 적금 실효수익률(%) — 총 납입 원금 대비 이자 비율.
+ * 연이율 3.5%·12개월이어도 평균 예치기간이 6.5개월뿐이라 원금 대비로는
+ * 1.9% 수준이다. 이 괴리를 보여주지 않으면 "연 3.5%면 35만원 받겠지" 같은
+ * 오해가 남는다.
+ */
+export function effectiveYieldPct(principal: number, interest: number): number {
+  if (!assertInputs(principal, interest) || principal === 0) return 0;
+  return (interest / principal) * 100;
+}
+
+/** 가입일로부터 오늘까지 경과한 개월 수 (0 ~ months로 클램프) */
+export function monthsElapsed(startISO: string, months: number, today: Date = new Date()): number {
+  const [y, mo, d] = startISO.split('-').map(Number);
+  if (!y || !mo || !d) return 0;
+  let elapsed = (today.getFullYear() - y) * 12 + (today.getMonth() + 1 - mo);
+  if (today.getDate() < d) elapsed -= 1;
+  return Math.min(Math.max(elapsed, 0), Math.max(Math.round(months), 0));
+}
+
+/** 진행률(0~1). months가 0이면 0. */
+export function progressRatio(startISO: string, months: number, today: Date = new Date()): number {
+  const n = Math.round(months);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return monthsElapsed(startISO, n, today) / n;
+}
+
+/**
+ * 개월별 만기 금액 추이 — 그래프용. index 0은 1개월차.
+ * 각 시점은 "그 달까지 납입했고 그날 해지한다면 받을 세후 금액".
+ */
+export function savingsSeries(
+  monthly: number,
+  annualRatePct: number,
+  months: number,
+  mode: TaxMode
+): number[] {
+  const n = Math.round(months);
+  if (!assertInputs(monthly, annualRatePct, n) || n <= 0) return [];
+  const capped = Math.min(n, 600);
+  const out: number[] = [];
+  for (let i = 1; i <= capped; i++) out.push(savingsSimple(monthly, annualRatePct, i, mode).total);
+  return out;
+}
+
 /** 시작일(YYYY-MM-DD) + 개월 수 → 만기일 (말일 넘침은 말일로 클램프) */
 export function maturityDate(startISO: string, months: number): string {
   const [y, mo, d] = startISO.split('-').map(Number);
