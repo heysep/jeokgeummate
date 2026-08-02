@@ -185,12 +185,43 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
   bottom: 0;
   z-index: 20;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  /* .app의 좌우 패딩을 상쇄해 화면 끝까지 채운다 */
-  margin: 4px -20px 0;
+  /**
+   * margin-top: auto — sticky는 요소를 **붙잡아 둘 뿐 밀어내지 못한다**.
+   * 콘텐츠가 한 화면보다 짧아 스크롤이 없으면 배너가 콘텐츠 바로 뒤,
+   * 화면 중간에 떠 있게 된다. 실측: 390×844에서 '내 적금' 빈 상태일 때 56px 떴다
+   * (390×700에서는 스크롤이 생겨 안 드러났다 — 뷰포트가 클수록 위험하다).
+   * flex column인 .app에서 auto가 남은 공간을 전부 먹어 배너를 바닥까지 민다.
+   * 콘텐츠가 길면 auto가 0이 되고 그때부터 sticky가 일한다.
+   *
+   * 좌우 -20px / 아래 -40px은 .app 패딩을 상쇄해 화면 끝까지 채우기 위한 것.
+   * 아래 패딩을 상쇄하지 않으면 스크롤 끝에서 그만큼 위에 멈춘다.
+   */
+  margin: auto -20px -40px;
   padding: 6px 20px calc(6px + env(safe-area-inset-bottom, 0px));
   background: var(--bg);
   border-top: 1px solid var(--line);
 }
+/* 콘텐츠가 짧아도 .app이 화면을 채워야 margin-top: auto가 밀어낼 공간을 갖는다 */
+.app { min-height: 100dvh; }
 .ad-banner-label { font-size: 11px; color: var(--sub); }
 
 .disclaimer { font-size: 12px; color: #a5946e; line-height: 1.6; }
+
+/* ---------- 푸시 동의 유도 배너 ---------- */
+.push-optin {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--gold-soft); border: 1px solid var(--line);
+}
+.push-optin-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.push-optin-title { font-size: 14px; font-weight: 700; color: var(--gold-deep); }
+.push-optin-desc { font-size: 12px; color: var(--sub); line-height: 1.45; }
+.push-optin-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.push-optin-btn {
+  min-height: 36px; padding: 0 14px; border-radius: 10px;
+  background: var(--accent); color: #fff; font-size: 13px; font-weight: 700;
+}
+.push-optin-close {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  color: var(--sub); border-radius: 8px;
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BannerAd } from './ads/BannerAd';
 import { AD_GROUP_ID } from './ads/config';
 import { bumpInterstitial } from './ads/interstitial';
+import { PushOptIn } from './components/PushOptIn';
 import {
   compoundSavingsInterest,
   dDay,
@@ -550,6 +551,9 @@ export function App() {
           </button>
         ))}
       </div>
+
+      {/* 등록한 적금이 있어야 알릴 내용이 생긴다 — 빈 상태에서는 권하지 않는다 */}
+      {savings.length > 0 && <PushOptIn />}
 
       {tab === '적금' && <SavingsTab
           onSave={(item) => {
