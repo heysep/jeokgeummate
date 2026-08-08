@@ -40,7 +40,12 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 @media (max-width: 340px) { .grid2 { grid-template-columns: 1fr; } }
 
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.field-label { font-size: 13px; font-weight: 700; color: var(--sub); }
+.field-label {
+  font-size: 13px; font-weight: 700; color: var(--sub);
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; word-break: keep-all;
+}
+/* "3천만원" — 콤마를 세지 않고도 규모가 즉시 읽히게 하는 보조 표기 */
+.field-scale { font-size: 12px; font-weight: 600; color: var(--gold); }
 .field-wrap { position: relative; display: flex; align-items: center; }
 .field-input {
   border: 1.5px solid var(--line); border-radius: 12px;
@@ -137,10 +142,33 @@ button { font-family: inherit; border: none; background: none; cursor: pointer; 
 }
 
 .slider-field { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.slider { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 999px; background: var(--gold-soft); outline: none; }
+/*
+  지나온 구간을 채운다. 트랙이 한 가지 색이면 손잡이 위치만 보이고 "범위의 어디쯤인지"가
+  안 읽힌다. --fill은 SliderField가 값에서 계산해 인라인으로 넘긴다.
+  터치 영역은 44px을 지키되 트랙 자체는 얇게 유지한다.
+*/
+.slider {
+  -webkit-appearance: none; appearance: none; width: 100%; outline: none;
+  /* 손가락이 닿는 높이는 44px, 눈에 보이는 트랙은 4px — 트랙은 의사요소가 그린다.
+     요소 자체에 padding을 주고 background-clip으로 자르면 트랙이 통째로 사라진다(실측). */
+  height: 44px; margin: -20px 0; background: transparent;
+}
+.slider::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--gold) 0%, var(--gold) var(--fill, 0%),
+    var(--gold-soft) var(--fill, 0%), var(--gold-soft) 100%
+  );
+}
+.slider::-moz-range-track { height: 4px; border-radius: 999px; background: var(--gold-soft); }
+.slider::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--gold); }
+.slider:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 999px; }
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; width: 24px; height: 24px; border-radius: 50%;
   background: var(--gold); border: 3px solid #fff; box-shadow: 0 1px 4px rgba(90, 66, 10, 0.3);
+  /* 트랙(4px) 한가운데에 손잡이(24px)를 맞춘다: (4 - 24) / 2 */
+  margin-top: -10px;
 }
 .slider::-moz-range-thumb {
   width: 22px; height: 22px; border-radius: 50%; background: var(--gold); border: 3px solid #fff;

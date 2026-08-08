@@ -117,29 +117,63 @@ function Icon({ name }: { name: 'coins' | 'target' | 'vault' | 'list' | 'copy' |
   );
 }
 
+/** 정수 문자열에 천단위 콤마를 넣는다. 소수점 뒤는 건드리지 않는다. */
+function group(v: string): string {
+  if (v === '') return '';
+  const [int, ...rest] = v.split('.');
+  const withComma = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return rest.length > 0 ? `${withComma}.${rest.join('.')}` : withComma;
+}
+
+/** 30000000 → "3천만" — 자릿수를 세지 않고도 규모가 읽히게 한다. */
+function korScale(n: number): string {
+  if (!Number.isFinite(n) || n < 10_000) return '';
+  const eok = Math.floor(n / 100_000_000);
+  const man = Math.floor((n % 100_000_000) / 10_000);
+  const parts: string[] = [];
+  if (eok > 0) parts.push(`${group(String(eok))}억`);
+  if (man > 0) parts.push(`${group(String(man))}만`);
+  return parts.length > 0 ? `${parts.join(' ')}원` : '';
+}
+
 function Field({
   label,
   value,
   onChange,
   suffix,
   placeholder,
+  money = false,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   suffix?: string;
   placeholder?: string;
+  /** 금액 칸이면 천단위 콤마로 보여주고 한글 규모를 덧붙인다 */
+  money?: boolean;
 }) {
+  /*
+    상태에는 콤마 없는 원본을 두고 화면에만 콤마를 넣는다.
+    상태에 콤마를 넣으면 num()·저장값·슬라이더가 전부 그 표기를 다시 벗겨야 한다.
+
+    slice(0, 13)은 콤마를 넣기 **전** 원본에 걸어야 한다. 표시값에 걸면
+    콤마가 글자 수를 잡아먹어 실제 한도가 조용히 줄어든다.
+  */
+  const shown = money ? group(value) : value;
+  const scale = money ? korScale(num(value)) : '';
   return (
     <label className="field">
-      <span className="field-label">{label}</span>
+      <span className="field-label">
+        {label}
+        {scale !== '' && <span className="field-scale">{scale}</span>}
+      </span>
       <div className="field-wrap">
         <input
           className="field-input"
-          inputMode="decimal"
+          inputMode={money ? 'numeric' : 'decimal'}
           placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value.replace(/[^0-9.,]/g, '').slice(0, 13))}
+          value={shown}
+          onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, '').slice(0, 13))}
         />
         {suffix && <span className="suffix">{suffix}</span>}
       </div>
@@ -161,6 +195,7 @@ function SliderField({
   min,
   max,
   step,
+  money = false,
 }: {
   label: string;
   value: string;
@@ -169,12 +204,15 @@ function SliderField({
   min: number;
   max: number;
   step: number;
+  money?: boolean;
 }) {
   const n = num(value);
   const knob = Math.min(Math.max(n, min), max);
+  // 지나온 구간을 채워 현재 위치가 범위의 어디쯤인지 보이게 한다.
+  const pct = max > min ? ((knob - min) / (max - min)) * 100 : 0;
   return (
     <div className="slider-field">
-      <Field label={label} value={value} onChange={onChange} suffix={suffix} />
+      <Field label={label} value={value} onChange={onChange} suffix={suffix} money={money} />
       <input
         className="slider"
         type="range"
@@ -183,6 +221,7 @@ function SliderField({
         max={max}
         step={step}
         value={knob}
+        style={{ ['--fill' as string]: `${pct}%` }}
         onChange={(e) => onChange(e.target.value)}
       />
     </div>
@@ -366,7 +405,7 @@ function SavingsTab({ onSave }: { onSave: (item: SavedSaving) => void }) {
 
   return (
     <section className="panel">
-      <SliderField label="월 납입액" value={monthly} onChange={setMonthly} suffix="원" min={0} max={2000000} step={10000} />
+      <SliderField label="월 납입액" value={monthly} onChange={setMonthly} suffix="원" min={0} max={2000000} step={10000} money />
       <SliderField label="연이율" value={rate} onChange={setRate} suffix="%" min={0} max={10} step={0.1} />
       <SliderField label="기간" value={months} onChange={setMonths} suffix="개월" min={1} max={60} step={1} />
       {/* tax는 위 정착 카운터의 의존성에 이미 들어 있다 — 여기서 또 세면 두 번 센다 */}
@@ -459,7 +498,7 @@ function GoalTab() {
 
   return (
     <section className="panel">
-      <SliderField label="목표 금액" value={goal} onChange={setGoal} suffix="원" min={0} max={100000000} step={1000000} />
+      <SliderField label="목표 금액" value={goal} onChange={setGoal} suffix="원" min={0} max={100000000} step={1000000} money />
       <SliderField label="기간" value={months} onChange={setMonths} suffix="개월" min={1} max={60} step={1} />
       <SliderField label="연이율" value={rate} onChange={setRate} suffix="%" min={0} max={10} step={0.1} />
       <TaxPicker mode={tax} onChange={(m) => { setTax(m); bumpInterstitial(2); }} />
@@ -472,7 +511,12 @@ function GoalTab() {
             : [
                 ['총 납입 원금', won(check.principal)],
                 ['세후 이자', won(check.netInterest)],
-                ['만기 예상 수령액', won(check.total)],
+                /*
+                  월 납입액을 100원 단위로 올림해 목표를 "채우는" 값이라, 만기액은
+                  목표보다 조금 넘친다(1,000만원 목표에 10,000,009원). 계산은 맞는데
+                  라벨이 '예상 수령액'이면 9원 오차가 버그처럼 읽힌다. 넘친다는 사실을 라벨에 쓴다.
+                */
+                ['만기 수령액 (목표 이상)', won(check.total)],
               ]
         }
       />
@@ -491,7 +535,7 @@ function DepositTab() {
 
   return (
     <section className="panel">
-      <SliderField label="맡길 목돈" value={principal} onChange={setPrincipal} suffix="원" min={0} max={100000000} step={1000000} />
+      <SliderField label="맡길 목돈" value={principal} onChange={setPrincipal} suffix="원" min={0} max={100000000} step={1000000} money />
       <SliderField label="연이율" value={rate} onChange={setRate} suffix="%" min={0} max={10} step={0.1} />
       <SliderField label="기간" value={months} onChange={setMonths} suffix="개월" min={1} max={60} step={1} />
       <div className="chips" role="radiogroup" aria-label="이자 방식">
@@ -560,7 +604,7 @@ function MyTab({ items, onChange }: { items: SavedSaving[]; onChange: (next: Sav
         />
       </label>
       <div className="grid2">
-        <Field label="월 납입액" value={monthly} onChange={setMonthly} suffix="원" />
+        <Field label="월 납입액" value={monthly} onChange={setMonthly} suffix="원" money />
         <Field label="연이율" value={rate} onChange={setRate} suffix="%" />
       </div>
       <div className="grid2">
@@ -698,13 +742,6 @@ export function App() {
         ))}
       </div>
 
-      {/*
-        게이트를 걸지 않는다. 저장한 적금이 있어야 보여주면, 정작 동의를 받아야 할
-        신규 사용자에게는 배너가 영영 안 뜬다(D1 1%의 직접 원인). PushOptIn 내부에서
-        동의·닫기 이력으로 재노출을 막으므로 여기서 추가 조건은 불필요하다.
-      */}
-      <PushOptIn />
-
       {tab === '적금' && <SavingsTab
           onSave={(item) => {
             updateSavings([item, ...savings]);
@@ -714,6 +751,16 @@ export function App() {
       {tab === '목표' && <GoalTab />}
       {tab === '예금' && <DepositTab />}
       {tab === '내 적금' && <MyTab items={savings} onChange={updateSavings} />}
+
+      {/*
+        결과 **아래**에 둔다. 위에 두면 390×844에서 이 카드가 세로 3분의 1을 먹고
+        만기 수령액을 화면 밖으로 밀어낸다 — 열자마자 답이 보여야 한다는 원칙과 정면으로 부딪힌다.
+
+        게이트는 걸지 않는다. 저장한 적금이 있어야 보여주면, 정작 동의를 받아야 할
+        신규 사용자에게는 배너가 영영 안 뜬다. PushOptIn 내부에서 동의·닫기 이력으로
+        재노출을 막으므로 여기서 추가 조건은 불필요하다.
+      */}
+      <PushOptIn />
 
       <p className="disclaimer">
         본 계산 결과는 참고용 모의 계산으로 법적 효력이 없어요. 실제 이자·세금은 상품 약관과 가입 조건에 따라 달라질 수
