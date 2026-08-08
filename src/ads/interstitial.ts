@@ -50,3 +50,30 @@ export function bumpInterstitial(threshold: number): void {
   shownCount++;
   play();
 }
+
+/**
+ * 조작이 끝난 뒤에만 1회로 세는 bump.
+ *
+ * 왜 필요한가: 슬라이더는 onChange를 픽셀마다 부른다. 그대로 세면 드래그 한 번이
+ * 문턱을 순식간에 넘겨 **드래그 도중에 전면광고가 튀어나온다.** 사용자에게는
+ * 오작동으로 보이고, 콘솔 기준으로는 어뷰징(지면·앱 노출 제한) 판정을 받는 형태다.
+ *
+ * 마지막 호출로부터 delay 동안 조용하면 그때 한 번만 bump한다.
+ * 드래그 한 번 = 1회, 숫자 입력 한 번 = 1회로 수렴한다.
+ */
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
+export function bumpInterstitialSettled(threshold: number, delay = 900): void {
+  if (settleTimer !== undefined) clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    settleTimer = undefined;
+    bumpInterstitial(threshold);
+  }, delay);
+}
+
+/** 테스트용 — 모듈 카운터를 초기 상태로 되돌린다. */
+export function __resetInterstitial(): void {
+  shownCount = 0;
+  actionCount = 0;
+  if (settleTimer !== undefined) clearTimeout(settleTimer);
+  settleTimer = undefined;
+}

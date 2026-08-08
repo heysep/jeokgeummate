@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BannerAd } from './ads/BannerAd';
 import { AD_GROUP_ID } from './ads/config';
-import { bumpInterstitial } from './ads/interstitial';
+import { bumpInterstitial, bumpInterstitialSettled } from './ads/interstitial';
 import { PushOptIn } from './components/PushOptIn';
 import {
   compoundSavingsInterest,
@@ -280,6 +280,22 @@ function SavingsTab({ onSave }: { onSave: (item: SavedSaving) => void }) {
     saveLastInput({ monthly, ratePct: rate, months, taxMode: tax });
   }, [monthly, rate, months, tax]);
 
+  /*
+    조건을 바꿔가며 살펴보는 사람에게만 전면광고를 센다.
+
+    슬라이더가 세 개라 여기가 유일한 공통 길목이다. 다만 첫 실행은 마운트라
+    조작이 아니므로 건너뛰고, 드래그는 정착 후 1회로 접는다(bumpInterstitialSettled).
+    결과는 열자마자 기본값으로 보이므로 첫 답을 광고가 막지 않는다.
+  */
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    bumpInterstitialSettled(3);
+  }, [monthly, rate, months, tax]);
+
   const m = num(monthly);
   const n = Math.round(num(months));
   const r = savingsSimple(m, num(rate), n, tax);
@@ -353,7 +369,8 @@ function SavingsTab({ onSave }: { onSave: (item: SavedSaving) => void }) {
       <SliderField label="월 납입액" value={monthly} onChange={setMonthly} suffix="원" min={0} max={2000000} step={10000} />
       <SliderField label="연이율" value={rate} onChange={setRate} suffix="%" min={0} max={10} step={0.1} />
       <SliderField label="기간" value={months} onChange={setMonths} suffix="개월" min={1} max={60} step={1} />
-      <TaxPicker mode={tax} onChange={(v) => { setTax(v); bumpInterstitial(2); }} />
+      {/* tax는 위 정착 카운터의 의존성에 이미 들어 있다 — 여기서 또 세면 두 번 센다 */}
+      <TaxPicker mode={tax} onChange={setTax} />
       <ResultCard
         title="만기 수령액 (단리)"
         big={won(r.total)}
