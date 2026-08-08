@@ -37,10 +37,16 @@ function play(): void {
   }
 }
 
-/** 능동 액션마다 호출 — threshold회째에 전면광고 1번(세션 캡 적용). */
+/**
+ * 능동 액션마다 호출 — threshold회째부터 전면광고 1번(세션 캡 적용).
+ *
+ * 정확일치(!==)였을 때는 한 상호작용이 bump를 두 번 불러 카운터가 threshold를
+ * 건너뛰면 그 세션은 전면광고를 영영 못 띄웠다. 노출 빈도는 그대로 두고
+ * 건너뜀만 막는다.
+ */
 export function bumpInterstitial(threshold: number): void {
   actionCount++;
-  if (shownCount >= SESSION_CAP || actionCount !== threshold) return;
+  if (shownCount >= SESSION_CAP || actionCount < threshold) return;
   shownCount++;
   play();
 }

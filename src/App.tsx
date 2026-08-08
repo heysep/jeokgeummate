@@ -18,12 +18,25 @@ import {
   type TaxMode,
 } from './core/savings';
 import {
+  copyText,
   loadLastInput,
   loadSavings,
   saveLastInput,
   saveSavings,
   type SavedSaving,
 } from './core/storage';
+
+// 보너스(금리 비교)는 순수 추가분이라 기존 import 줄을 건드리지 않고 따로 가져온다.
+import { canShowRewarded, showRewarded } from './ads/rewarded';
+
+/** 보너스에서 비교할 금리 차이(%p) */
+const RATE_DELTAS = [-1, -0.5, -0.25, 0.25, 0.5, 1] as const;
+
+/**
+ * 보너스 해제 여부. 탭을 옮기면 SavingsTab이 다시 마운트되므로 컴포넌트 state로 두면
+ * 광고를 본 사실이 사라진다. 모듈 스코프에 둬서 앱이 살아 있는 동안 유지한다.
+ */
+let rateUnlocked = false;
 
 const TABS = ['적금', '목표', '예금', '내 적금'] as const;
 type Tab = (typeof TABS)[number];
@@ -44,7 +57,7 @@ function won(n: number): string {
 }
 
 /** SVG 라인 아이콘 24px, stroke 1.8 (이모지 금지) */
-function Icon({ name }: { name: 'coins' | 'target' | 'vault' | 'list' }) {
+function Icon({ name }: { name: 'coins' | 'target' | 'vault' | 'list' | 'copy' | 'check' }) {
   const common = {
     width: 24,
     height: 24,
@@ -79,6 +92,19 @@ function Icon({ name }: { name: 'coins' | 'target' | 'vault' | 'list' }) {
         <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
         <circle cx="12" cy="12" r="3.6" />
         <path d="M12 8.4V6.8M12 17.2v-1.6M15.6 12h1.6M6.8 12h1.6" />
+      </svg>
+    );
+  if (name === 'copy')
+    return (
+      <svg {...common}>
+        <rect x="9" y="9" width="11" height="11" rx="2" />
+        <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+      </svg>
+    );
+  if (name === 'check')
+    return (
+      <svg {...common}>
+        <path d="m5 12.5 4.5 4.5L19 7.5" />
       </svg>
     );
   return (
@@ -263,6 +289,30 @@ function SavingsTab({ onSave }: { onSave: (item: SavedSaving) => void }) {
   const effective = effectiveYieldPct(r.principal, r.interest);
   const effectiveNet = effectiveYieldPct(r.principal, r.netInterest);
 
+  // 보너스: 금리가 달라지면 만기 수령액이 얼마나 달라지는지. 광고를 본 뒤 열린다.
+  const [bonus, setBonus] = useState(rateUnlocked);
+  const [bonusLoading, setBonusLoading] = useState(false);
+  const unlockBonus = () => {
+    if (bonus || bonusLoading) return;
+    setBonusLoading(true);
+    showRewarded({
+      onReward: () => {
+        rateUnlocked = true;
+        setBonus(true);
+      },
+      onClose: () => setBonusLoading(false),
+    });
+  };
+  // 금리는 음수가 될 수 없다 — 0% 아래로 내려가는 칸은 아예 만들지 않는다.
+  const rateRows = useMemo(() => {
+    if (!bonus || m === 0 || n === 0) return [];
+    const baseRate = num(rate);
+    return RATE_DELTAS.filter((d) => baseRate + d >= 0).map((d) => {
+      const total = savingsSimple(m, baseRate + d, n, tax).total;
+      return { delta: d, ratePct: baseRate + d, total, diff: total - r.total };
+    });
+  }, [bonus, m, n, rate, tax, r.total]);
+
   const saveToMine = () => {
     if (m === 0 || n === 0) return;
     const item: SavedSaving = {
@@ -272,8 +322,30 @@ function SavingsTab({ onSave }: { onSave: (item: SavedSaving) => void }) {
       ratePct: num(rate),
       months: n,
       startDate: todayISO(),
+      taxMode: tax,
     };
     onSave(item);
+  };
+
+  const [copied, setCopied] = useState(false);
+  /**
+   * 결과 카드가 이미 화면에 뜬 뒤에만 눌리는 버튼이라 "결과보다 광고가 먼저" 경로가
+   * 생기지 않는다. 임계값은 이 화면의 기존 호출부와 같은 2 — 카운터가 모듈 스코프 공유다.
+   * 딥링크는 카톡 등에 붙여넣으면 탭이 되지 않으므로 검색 문구를 발급처로 남긴다.
+   */
+  const onCopy = () => {
+    copyText(
+      [
+        `월 ${won(m)} · 연 ${num(rate)}% · ${n}개월 적금`,
+        `만기 수령액(단리) ${won(r.total)}`,
+        `원금 ${won(r.principal)} · 세후 이자 ${won(r.netInterest)}`,
+        '',
+        "토스에서 '적금 메이트' 검색",
+      ].join('\n')
+    );
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+    bumpInterstitial(2);
   };
 
   return (
@@ -293,6 +365,20 @@ function SavingsTab({ onSave }: { onSave: (item: SavedSaving) => void }) {
           ['월복리라면', `${won(compoundTotal)} (+${(compoundTotal - r.total).toLocaleString('ko-KR')}원)`],
         ]}
       />
+      {/*
+        저장 CTA는 결과 카드 바로 아래에 둔다.
+        예전에는 차트·수익률 노트·보너스 표를 전부 지나야 나왔다. 그런데 이 앱의
+        재방문 장치(내 적금 진행률·만기 D-day·ReturnStrip)는 전부 '저장된 항목이 있을 때'만
+        작동한다. 첫 세션에 저장이 안 되면 리텐션 구조 자체가 켜지지 않는다(실측 D1 1.2%).
+      */}
+      <button className="btn-primary" onClick={saveToMine}>
+        이 조건으로 내 적금에 저장
+      </button>
+      {/* 저장 CTA의 자리(리텐션 근거)는 그대로 두고 그 아래에 온다 — 결과를 가리지 않는다 */}
+      <button className="copy-btn" onClick={onCopy}>
+        <Icon name={copied ? 'check' : 'copy'} />
+        {copied ? '복사했어요' : '결과 복사'}
+      </button>
       <TrendChart series={series} months={n} />
       <div className="note">
         <span className="note-title">원금 대비 실제 수익률</span>
@@ -304,9 +390,43 @@ function SavingsTab({ onSave }: { onSave: (item: SavedSaving) => void }) {
           원금 대비로는 {effectiveNet.toFixed(2)}%가 돼요.
         </span>
       </div>
-      <button className="btn-primary" onClick={saveToMine}>
-        이 조건으로 내 적금에 저장
-      </button>
+      {/* 보너스 — 토스 앱 밖에서는 canShowRewarded()가 false라 버튼 자체가 안 보인다 */}
+      {canShowRewarded() && !bonus && (
+        <button type="button" className="bonus-cta" onClick={unlockBonus} disabled={bonusLoading}>
+          {bonusLoading ? '광고 확인 중' : '광고 보고 금리가 달라지면 얼마나 차이 나는지 보기'}
+        </button>
+      )}
+      {bonus && (
+        <div className="note">
+          <span className="note-title">금리가 달라지면 (단리 · {n}개월)</span>
+          {rateRows.length === 0 && (
+            <span className="note-body">월 납입액과 기간을 넣으면 금리별 차이를 보여 드려요.</span>
+          )}
+          <div className="rate-list">
+            {rateRows.map((row) => (
+              <div className="rate-row" key={row.delta}>
+                <span className="rate-pct">
+                  연 {row.ratePct.toFixed(2)}%
+                  <span className="rate-delta">
+                    {row.delta > 0 ? '+' : ''}
+                    {row.delta}%p
+                  </span>
+                </span>
+                <span className="rate-total">{won(row.total)}</span>
+                <span className={`rate-diff${row.diff >= 0 ? ' up' : ' down'}`}>
+                  {row.diff >= 0 ? '+' : '-'}
+                  {won(Math.abs(row.diff))}
+                </span>
+              </div>
+            ))}
+          </div>
+          <span className="note-body">
+            연 {num(rate)}% 기준 {won(r.total)}과 비교한 값이에요. 금리 차이가 만기에 얼마로 돌아오는지 그대로
+            보여 드려요.
+          </span>
+        </div>
+      )}
+
     </section>
   );
 }
@@ -444,12 +564,14 @@ function MyTab({ items, onChange }: { items: SavedSaving[]; onChange: (next: Sav
           {items.map((it) => {
             const end = maturityDate(it.startDate, it.months);
             const d = dDay(end);
-            const res = savingsSimple(it.monthly, it.ratePct, it.months, 'general');
+            // 저장 당시 고른 과세방식으로 계산해야 방금 본 금액과 일치한다. 구 스키마는 일반과세로 폴백.
+            const mode = it.taxMode ?? 'general';
+            const res = savingsSimple(it.monthly, it.ratePct, it.months, mode);
             const done = monthsElapsed(it.startDate, it.months);
             const left = Math.max(it.months - done, 0);
             const ratio = progressRatio(it.startDate, it.months);
             const pct = Math.round(ratio * 100);
-            const paid = savingsSimple(it.monthly, it.ratePct, done, 'general');
+            const paid = savingsSimple(it.monthly, it.ratePct, done, mode);
             return (
               <li key={it.id} className="saving-item">
                 <div className="saving-head">
@@ -481,7 +603,7 @@ function MyTab({ items, onChange }: { items: SavedSaving[]; onChange: (next: Sav
                     <span>{won(res.interest)}</span>
                   </div>
                   <div className="saving-row">
-                    <span>이자소득세 15.4%</span>
+                    <span>{mode === 'general' ? '이자소득세 15.4%' : mode === 'exempt' ? '비과세' : '세전'}</span>
                     <span>-{won(res.tax)}</span>
                   </div>
                   <div className="saving-row strong">
@@ -521,10 +643,17 @@ function ReturnStrip({ items, onOpen }: { items: SavedSaving[]; onOpen: () => vo
 }
 
 export function App() {
-  const [tab, setTab] = useState<Tab>('적금');
   // 저장 목록은 App이 단일 소유자다. SavingsTab과 MyTab이 각자 localStorage에
   // 쓰면 화면마다 다른 목록을 믿게 되고, 저장 직후 요약 줄이 갱신되지 않는다.
   const [savings, setSavings] = useState<SavedSaving[]>(loadSavings);
+  /**
+   * 저장한 적금이 있으면 '내 적금'으로 시작한다.
+   *
+   * 실측 D1 1.2%, DAU의 98%가 신규였다. 계산은 첫 화면에서 이미 끝나 버려서
+   * 다시 열 이유가 없었는데, 어렵게 돌아온 사람마저 계산기 탭부터 보게 하면
+   * "내가 담아둔 것"에 닿기까지 한 번 더 눌러야 했다. 재방문자에게는 자기 적금이 홈이다.
+   */
+  const [tab, setTab] = useState<Tab>(() => (loadSavings().length > 0 ? '내 적금' : '적금'));
   const updateSavings = (next: SavedSaving[]) => {
     setSavings(next);
     saveSavings(next);
@@ -552,8 +681,12 @@ export function App() {
         ))}
       </div>
 
-      {/* 등록한 적금이 있어야 알릴 내용이 생긴다 — 빈 상태에서는 권하지 않는다 */}
-      {savings.length > 0 && <PushOptIn />}
+      {/*
+        게이트를 걸지 않는다. 저장한 적금이 있어야 보여주면, 정작 동의를 받아야 할
+        신규 사용자에게는 배너가 영영 안 뜬다(D1 1%의 직접 원인). PushOptIn 내부에서
+        동의·닫기 이력으로 재노출을 막으므로 여기서 추가 조건은 불필요하다.
+      */}
+      <PushOptIn />
 
       {tab === '적금' && <SavingsTab
           onSave={(item) => {

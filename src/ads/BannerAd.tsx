@@ -36,6 +36,26 @@ function ensureInitialized(): void {
 }
 
 /**
+ * 광고 SDK 초기화를 앱 시작 시점으로 앞당긴다.
+ *
+ * 왜 필요한가 — BannerAd는 initState가 'ready'가 되기 전에는 null을 반환한다.
+ * 초기화를 BannerAd의 effect에서 시작하면 첫 페인트 이후에야 시작되는데,
+ * 이 앱들은 평균 세션이 20~24초라 그 사이 이탈하면 배너가 "안 붙은 채로" 끝난다.
+ * (실측 impressionPerUser 0.5 — 절반이 노출 없이 나감)
+ * main.tsx에서 한 번 호출해 두면 React 마운트·데이터 로드와 초기화가 겹쳐 돈다.
+ *
+ * 토스 앱 밖에서는 isSupported()가 동기로 throw하므로 조용히 넘어간다.
+ */
+export function initAds(): void {
+  try {
+    if (!TossAds.initialize.isSupported()) return;
+  } catch {
+    return;
+  }
+  ensureInitialized();
+}
+
+/**
  * 토스 네이티브 배너 광고. 다음 경우엔 자리를 차지하지 않고 사라진다.
  * - 광고 그룹 ID 미발급(빈 문자열)
  * - 구버전 토스 앱 등 미지원 환경(isSupported=false)
